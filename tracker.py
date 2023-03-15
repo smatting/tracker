@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+'''
+Determine user activity by listening to X events (e.g. mouse, keyboard)
+and log 5-minute-binnted activity to ~/.tracker/YYYY-MM-DD files
+
+You can also register user activity by signalling SIGUP to the process.
+'''
 
 import datetime
 import time
@@ -67,63 +73,17 @@ def log_active_bin(dt):
     with open(p, 'a', encoding='utf8') as f:
         f.write(f'{dt_str}\n')
 
-def notify_tracker(pid, pidfile):
-    if pid is None:
-        pid = read_pidfile(pidfile)
-
-    try:
-        if pid is not None:
-            os.kill(pid, signal.SIGHUP)
-    except ProcessLookupError:
-        pid = read_pidfile(pidfile)
-
-    return pid
-
-
-def main_keyboard(pidfile):
-    import keyboard
-    pid = read_pidfile(pidfile)
-    while True:
-        try:
-            e = keyboard.read_event()
-            t = time.time()
-            print(t, 'keyboard activity')
-            pid = notify_tracker(pid, pidfile)
-        except ImportError:
-            raise
-        except Exception:
-            time.sleep(1)
-
-def main_mouse():
-    t_last = time.time()
-
-
-    pidfile = get_pidfile()
-    pid = read_pidfile(pidfile)
-
+def main():
     def listen():
-        nonlocal t_last
+        global t_last_activity
         p = subprocess.Popen(['xinput', 'test-xi2', '--root'], stdout=subprocess.PIPE)
         for line in p.stdout:
-            t_last = time.time()
+            t = time.time()
+            t_last_activity = time.time()
 
     thread = threading.Thread(target=listen)
     thread.start()
 
-    try:
-        while True:
-            t = time.time()
-            if t - t_last < 1.0:
-                print(t, 'mouse activity')
-                pid = notify_tracker(pid, pidfile)
-            time.sleep(1)
-    except:
-        raise
-    finally:
-        thread.join()
-
-
-def main():
     try:
         own_pid = os.getpid()
         pidfile = get_pidfile()
@@ -141,32 +101,22 @@ def main():
             current_bin = bin_time(t)
             next_bin = bin_inc(current_bin)
             sleep = (next_bin - t).total_seconds()
-            print('current_bin', current_bin)
-            print('sleep', sleep)
+            print('current_bin', bin_to_string(current_bin))
             time.sleep(sleep)
             # at the end of current_bin
             if t_last_activity is not None:
                 if t_last_activity > current_bin.timestamp():
-                    print('logging active bin')
+                    print('user was active during the last 5 minutes')
                     log_active_bin(current_bin)
                 else:
-                    print('no activity')
+                    print('user was inactive during the last 5 minutes')
     finally:
         try:
             os.remove(pidfile)
         except FileNotFoundError:
             pass
+        thread.join()
 
 
 if __name__ == '__main__':
-    cmd = sys.argv[1]
-    if cmd == 'track':
-        main()
-    elif cmd == 'keyboard':
-        pidfile = sys.argv[2]
-        main_keyboard(pidfile)
-    elif cmd == 'mouse':
-        main_mouse()
-    else:
-        print(f'Unknown command {cmd}')
-        sys.exit(1)
+    main()
