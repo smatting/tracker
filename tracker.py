@@ -61,9 +61,13 @@ def read_pidfile(p):
     except FileNotFoundError:
         return None
 
-def log_active_bin(dt):
+def day_file(dt):
     fn = dt.strftime('%Y-%m-%d')
     p = os.path.expanduser(f'~/.tracker/{fn}')
+    return p
+
+def log_active_bin(dt):
+    p = day_file(dt)
     os.makedirs(os.path.dirname(p), exist_ok=True)
     dt_str = bin_to_string(dt)
     if os.path.exists(p):
@@ -72,6 +76,37 @@ def log_active_bin(dt):
             return
     with open(p, 'a', encoding='utf8') as f:
         f.write(f'{dt_str}\n')
+
+def current_week():
+    today = datetime.date.today()
+    monday = today - datetime.timedelta(days=today.weekday())
+    result = []
+    for i in range(7):
+        d = monday + datetime.timedelta(days=i)
+        result.append(d)
+    return result
+
+def count_minutes(day):
+    p = day_file(day)
+    try:
+        with open(p, 'r') as f:
+            return len(f.readlines()) * 5
+    except:
+        return 0
+
+def format_hours(minutes):
+    return f'{(minutes / 60.0):.1f}'
+
+def main_report():
+    today = datetime.date.today()
+    mins_today = count_minutes(today)
+
+    mins_week = 0
+    for day in current_week():
+        mins_week += count_minutes(day)
+
+    report = f'{format_hours(mins_today)} {format_hours(mins_week)}'
+    print(report)
 
 def main():
     def listen():
@@ -119,4 +154,11 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    if len(sys.argv) >= 2:
+        if sys.argv[1] == 'report':
+            main_report()
+        else:
+            print(f'Unknown command {sys.argv[1]}')
+            sys.exit(1)
+    else:
+        main()
